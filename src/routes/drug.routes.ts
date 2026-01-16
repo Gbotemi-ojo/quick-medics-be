@@ -1,14 +1,16 @@
 import { Router } from 'express';
-import { createDrug, getDrugs,updateDrug} from '../controllers/drug.controller';
+import { createDrug, getDrugs, updateDrug, getDrug, getCategories } from '../controllers/drug.controller';
+import { authenticate } from '../middleware/auth';
 
 const router = Router();
 
-// POST /api/drugs - Create or Update a single drug
-router.post('/', createDrug);
-
-// GET /api/drugs - Retrieve all drugs with their categories
+// Public Routes
+router.get('/categories', getCategories); // <--- NEW (Must be before /:id)
 router.get('/', getDrugs);
+router.get('/:id', getDrug);
 
-router.put('/:id', updateDrug);
+// Protected Routes
+router.post('/', authenticate, createDrug);
+router.put('/:id', authenticate, updateDrug);
 
 export default router;

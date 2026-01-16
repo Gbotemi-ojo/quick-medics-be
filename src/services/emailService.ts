@@ -1,42 +1,102 @@
-// src/services/emailService.ts
 import nodemailer from 'nodemailer';
+import SMTPTransport from 'nodemailer/lib/smtp-transport'; 
 import dotenv from 'dotenv';
+import fs from 'fs';
+import path from 'path';
 
 dotenv.config();
 
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST, // e.g., smtp.gmail.com or mail.yourdomain.com
-  port: Number(process.env.SMTP_PORT) || 587,
-  secure: false, // true for 465, false for other ports
+// 1. Extend the standard type to allow 'family'
+interface ExtendedOptions extends SMTPTransport.Options {
+  family?: number;
+}
+
+// Determine if we should use SSL based on port 465
+const isSecure = process.env.SMTP_PORT === '465' || process.env.SMTP_SECURE === 'true';
+
+// 2. Use the extended interface here
+const transportOptions: ExtendedOptions = {
+  host: process.env.SMTP_HOST,
+  port: Number(process.env.SMTP_PORT),
+  secure: isSecure,
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
   },
-});
+  family: 4, // <--- No longer causes an error
+  logger: true,
+  debug: true
+};
+
+const transporter = nodemailer.createTransport(transportOptions);
+
+const loadTemplate = (templateName: string, replacements: Record<string, string>) => {
+    const templatePath = path.join(process.cwd(), 'src', 'templates', templateName);
+    
+    try {
+        let html = fs.readFileSync(templatePath, 'utf8');
+        for (const key in replacements) {
+            html = html.replace(new RegExp(`{{${key}}}`, 'g'), replacements[key]);
+        }
+        return html;
+    } catch (error) {
+        console.error(`Error loading template ${templateName}:`, error);
+        return ""; 
+    }
+};
 
 export const sendOtpEmail = async (to: string, otp: string) => {
+  console.log(`>>> Sending OTP to ${to} via ${process.env.SMTP_HOST}...`);
+  
+  const htmlContent = loadTemplate('otp.html', { otp });
+  
   const mailOptions = {
-    from: `"Pharmacy Admin" <${process.env.SMTP_USER}>`,
+    from: `"Quick Medics" <${process.env.SMTP_USER}>`,
     to,
-    subject: 'Password Reset OTP',
-    text: `Your OTP for password reset is: ${otp}. It expires in 10 minutes.`,
-    html: `
-      <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
-        <h2 style="color: #2c3e50;">Password Reset Request</h2>
-        <p>You requested a password reset. Use the code below to proceed:</p>
-        <h1 style="color: #3498db; letter-spacing: 5px;">${otp}</h1>
-        <p>This code expires in 10 minutes.</p>
-        <p>If you did not request this, please ignore this email.</p>
-      </div>
-    `,
+    subject: 'Your Security Code',
+    html: htmlContent || `<p>Your OTP Code is: <strong>${otp}</strong></p>`,
   };
 
-  try {
-    const info = await transporter.sendMail(mailOptions);
-    console.log('Email sent: ' + info.response);
-    return true;
-  } catch (error) {
-    console.error('Error sending email:', error);
-    return false;
+  try { 
+      const info = await transporter.sendMail(mailOptions); 
+      console.log(">>> Email sent successfully! Message ID:", info.messageId);
+      return true; 
+  } catch (e) { 
+      console.error(">>> EMAIL SENDING FAILED:", e);
+      return false; 
+  }
+};
+
+export const sendOrderConfirmationEmail = async (to: string, orderDetails: any) => {
+  const { customerName, orderId, totalAmount, items, address } = orderDetails;
+
+  const itemsHtml = items.map((item: any) => `
+    <tr>
+      <td>${item.productName}</td>
+      <td>x${item.qty || item.quantity}</td>
+      <td style="text-align:right">₦${Number(item.price).toLocaleString()}</td>
+    </tr>
+  `).join('');
+
+  const htmlContent = loadTemplate('receipt.html', {
+    customerName,
+    orderId: orderId.toString(),
+    totalAmount: Number(totalAmount).toLocaleString(),
+    address,
+    itemsHtml 
+  });
+
+  const mailOptions = {
+    from: `"Quick Medics" <${process.env.SMTP_USER}>`,
+    to,
+    subject: `Receipt for Order #${orderId}`,
+    html: htmlContent,
+  };
+
+  try { 
+      await transporter.sendMail(mailOptions);
+      console.log(`>>> Receipt sent to ${to}`);
+  } catch (e) { 
+      console.error("Receipt Email Failed:", e); 
   }
 };

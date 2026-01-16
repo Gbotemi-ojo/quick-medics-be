@@ -15,40 +15,35 @@ const seedUsers = async () => {
   });
   const db = drizzle(pool);
 
-  // Admin Credentials
-  const ADMIN_NAME = 'System Admin';
+  // Admin Credentials (Matches Login.js requirements)
+  const ADMIN_USERNAME = 'admin';
   const ADMIN_EMAIL = 'hommzmum@gmail.com';
-  const ADMIN_PHONE = '08163943804'; 
   const ADMIN_PASS = '1234'; 
 
   try {
     const hashedPassword = await bcrypt.hash(ADMIN_PASS, 10);
 
-    // 1. Check if user exists by EMAIL
-    const [existingUser] = await db.select().from(users).where(eq(users.email, ADMIN_EMAIL)).limit(1);
+    // 1. Check if user exists by USERNAME
+    const [existingUser] = await db.select().from(users).where(eq(users.username, ADMIN_USERNAME)).limit(1);
 
     if (existingUser) {
-      // Update existing admin to ensure password is correct
+      // FIX: Force update password and email if user exists
       await db.update(users)
         .set({ 
             password: hashedPassword,
-            fullName: ADMIN_NAME,
-            phone: ADMIN_PHONE,
-            role: 'admin' // Ensure role is set
+            email: ADMIN_EMAIL 
         })
-        .where(eq(users.email, ADMIN_EMAIL));
+        .where(eq(users.username, ADMIN_USERNAME));
         
-      console.log(`✅ Admin user '${ADMIN_EMAIL}' updated successfully.`);
+      console.log(`✅ Admin user '${ADMIN_USERNAME}' updated with password '${ADMIN_PASS}'.`);
     } else {
-      // Create new admin
+      // 2. Create new user if not exists
       await db.insert(users).values({
-        fullName: ADMIN_NAME,
+        username: ADMIN_USERNAME,
         email: ADMIN_EMAIL,
-        phone: ADMIN_PHONE,
         password: hashedPassword,
-        role: 'admin'
       });
-      console.log(`✅ Admin user '${ADMIN_EMAIL}' created successfully.`);
+      console.log(`✅ Admin user '${ADMIN_USERNAME}' created successfully.`);
     }
   } catch (error) {
     console.error('❌ Error seeding users:', error);
