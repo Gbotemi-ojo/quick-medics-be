@@ -31,7 +31,8 @@ export const getDrugs = async (req: Request, res: Response) => {
 
 export const getDrug = async (req: Request, res: Response) => {
   try {
-    const id = parseInt(req.params.id);
+    // FIX: Added 'as string' to resolve TS error
+    const id = parseInt(req.params.id as string);
     const result = await drugService.getDrugById(id);
     if (!result) return res.status(404).json({ success: false, message: 'Drug not found' });
     res.status(200).json({ success: true, data: result });
@@ -47,7 +48,8 @@ export const createDrug = async (req: Request, res: Response) => {
 
 export const updateDrug = async (req: Request, res: Response) => {
   try {
-    const id = parseInt(req.params.id);
+    // FIX: Added 'as string' to resolve TS error
+    const id = parseInt(req.params.id as string);
     const result = await drugService.updateDrug(id, req.body);
     res.status(200).json({ success: true, data: result });
   } catch (error) { res.status(500).json({ success: false, message: 'Error' }); }
