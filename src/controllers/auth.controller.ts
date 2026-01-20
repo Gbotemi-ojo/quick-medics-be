@@ -6,23 +6,24 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import { sendOtpEmail } from '../services/emailService';
+import { OAuth2Client } from 'google-auth-library'; // <--- NEW IMPORT
+
+// Make sure to add GOOGLE_CLIENT_ID to your backend .env file!
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // Register User
 export const register = async (req: Request, res: Response) => {
   try {
     const { fullName, email, password, phone } = req.body;
 
-    // 1. Check if user exists
     const [existingUser] = await db.select().from(users).where(eq(users.email, email));
     if (existingUser) {
       return res.status(400).json({ success: false, message: 'Email already registered' });
     }
 
-    // 2. Hash Password
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // 3. Insert User
     await db.insert(users).values({
       fullName,
       email,
@@ -30,10 +31,8 @@ export const register = async (req: Request, res: Response) => {
       phone
     });
 
-    // 4. Fetch the newly created user to generate token
     const [newUser] = await db.select().from(users).where(eq(users.email, email));
 
-    // 5. Generate Token
     const token = jwt.sign(
       { id: newUser.id, email: newUser.email },
       process.env.JWT_SECRET || 'secret_key_change_me',
@@ -54,23 +53,25 @@ export const register = async (req: Request, res: Response) => {
 
 // Login User
 export const login = async (req: Request, res: Response) => {
-  const { email, password } = req.body; // Changed username to email
+  const { email, password } = req.body;
 
   try {
-    // 1. Find user by email
     const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
 
     if (!user) {
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
 
-    // 2. Check Password
+    // Google users might not have a password
+    if (!user.password) {
+        return res.status(401).json({ success: false, message: 'Please login with Google' });
+    }
+
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
 
-    // 3. Generate Token
     const token = jwt.sign(
       { id: user.id, email: user.email },
       process.env.JWT_SECRET || 'secret_key_change_me', 
@@ -123,5 +124,59 @@ export const resetPassword = async (req: Request, res: Response) => {
     res.json({ success: true, message: 'Password reset successfully' });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+// --- NEW: GOOGLE AUTH CONTROLLER ---
+export const googleAuth = async (req: Request, res: Response) => {
+  try {
+    const { credential } = req.body;
+
+    const ticket = await googleClient.verifyIdToken({
+        idToken: credential,
+        audience: process.env.GOOGLE_CLIENT_ID
+    });
+    const payload = ticket.getPayload();
+    
+    if (!payload || !payload.email) {
+        return res.status(400).json({ success: false, message: 'Invalid Google Token' });
+    }
+
+    const { email, name, sub: googleId } = payload;
+
+    let [user] = await db.select().from(users).where(eq(users.email, email));
+
+    if (!user) {
+        // Register new user
+        await db.insert(users).values({
+            fullName: name || 'Google User',
+            email: email,
+            googleId: googleId,
+            password: null, // No password
+            role: 'user'
+        });
+        [user] = await db.select().from(users).where(eq(users.email, email));
+    } else {
+        // Link Google ID if missing
+        if (!user.googleId) {
+            await db.update(users).set({ googleId }).where(eq(users.id, user.id));
+        }
+    }
+
+    const token = jwt.sign(
+      { id: user.id, email: user.email, role: user.role },
+      process.env.JWT_SECRET || 'secret_key_change_me', 
+      { expiresIn: '7d' }
+    );
+
+    res.json({
+      success: true,
+      token,
+      user: { id: user.id, name: user.fullName, email: user.email, role: user.role }
+    });
+
+  } catch (error) {
+    console.error("Google Auth Error:", error);
+    res.status(500).json({ success: false, message: 'Google Authentication Failed' });
   }
 };

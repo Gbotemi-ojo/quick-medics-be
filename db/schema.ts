@@ -1,15 +1,34 @@
-// db/schema.ts
 import { serial, int, varchar, text, boolean, timestamp, mysqlTable, decimal } from 'drizzle-orm/mysql-core';
 import { relations } from 'drizzle-orm';
 
-// --- EXISTING TABLES (Keep as is) ---
+// --- HOMEPAGE SECTIONS ---
+export const homepageSections = mysqlTable('homepage_sections', {
+  id: serial('id').primaryKey(),
+  title: varchar('title', { length: 255 }).notNull(),
+  categoryId: int('category_id'), // Optional: If set, fills remaining slots from this category
+  displayOrder: int('display_order').default(0),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// --- SECTION ITEMS (NEW: Link Drugs to Sections) ---
+export const sectionItems = mysqlTable('section_items', {
+  id: serial('id').primaryKey(),
+  sectionId: int('section_id').notNull(),
+  drugId: int('drug_id').notNull(),
+  displayOrder: int('display_order').default(0),
+});
+
+// --- CATEGORIES ---
 export const categories = mysqlTable('categories', {
   id: serial('id').primaryKey(),
   name: varchar('name', { length: 255 }).notNull().unique(),
   description: text('description'),
+  isFeatured: boolean('is_featured').default(false), 
+  imageUrl: varchar('image_url', { length: 2048 }), 
   createdAt: timestamp('created_at').defaultNow(),
 });
 
+// --- DRUGS ---
 export const drugs = mysqlTable('drugs', {
   id: serial('id').primaryKey(),
   name: varchar('name', { length: 255 }).notNull(),
@@ -23,46 +42,47 @@ export const drugs = mysqlTable('drugs', {
   expiryDate: timestamp('expiry_date'),
   isPrescriptionRequired: boolean('is_prescription_required').default(false),
   categoryId: int('category_id'),
+  discountPercent: int('discount_percent').default(0),
+  isFeatured: boolean('is_featured').default(false), 
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
 });
 
+// --- USERS ---
 export const users = mysqlTable('users', {
   id: serial('id').primaryKey(),
   fullName: varchar('full_name', { length: 255 }).notNull(),
   email: varchar('email', { length: 255 }).notNull().unique(),
   phone: varchar('phone', { length: 20 }),
-  password: varchar('password', { length: 255 }).notNull(),
-  role: varchar('role', { length: 20 }).default('user'), // 'user' or 'admin'
+  password: varchar('password', { length: 255 }), 
+  googleId: varchar('google_id', { length: 255 }).unique(),
+  role: varchar('role', { length: 20 }).default('user'),
   otp: varchar('otp', { length: 6 }),
   otpExpiresAt: timestamp('otp_expires_at'),
   createdAt: timestamp('created_at').defaultNow(),
 });
 
-// --- NEW TABLES ---
-
-// 4. Orders Table
+// --- ORDERS ---
 export const orders = mysqlTable('orders', {
   id: serial('id').primaryKey(),
-  userId: int('user_id'), // Nullable for guest checkout
+  userId: int('user_id'),
   customerName: varchar('customer_name', { length: 255 }).notNull(),
   customerEmail: varchar('customer_email', { length: 255 }).notNull(),
   customerPhone: varchar('customer_phone', { length: 50 }).notNull(),
-  deliveryAddress: text('delivery_address').notNull(), // New Address Field
+  deliveryAddress: text('delivery_address').notNull(),
   totalAmount: decimal('total_amount', { precision: 10, scale: 2 }).notNull(),
   paystackReference: varchar('paystack_reference', { length: 100 }).notNull().unique(),
-  status: varchar('status', { length: 50 }).default('paid'), // 'paid', 'pending', 'cancelled'
+  status: varchar('status', { length: 50 }).default('paid'),
   createdAt: timestamp('created_at').defaultNow(),
 });
 
-// 5. Order Items Table
 export const orderItems = mysqlTable('order_items', {
   id: serial('id').primaryKey(),
   orderId: int('order_id').notNull(),
-  drugId: int('drug_id'), // Nullable in case drug is deleted later
-  productName: varchar('product_name', { length: 255 }).notNull(), // Snapshot of name
+  drugId: int('drug_id'),
+  productName: varchar('product_name', { length: 255 }).notNull(),
   quantity: int('quantity').notNull(),
-  price: decimal('price', { precision: 10, scale: 2 }).notNull(), // Snapshot of price at purchase
+  price: decimal('price', { precision: 10, scale: 2 }).notNull(),
 });
 
 // --- RELATIONS ---
@@ -75,6 +95,26 @@ export const drugsRelations = relations(drugs, ({ one }) => ({
 
 export const categoriesRelations = relations(categories, ({ many }) => ({
   drugs: many(drugs),
+}));
+
+export const homepageSectionsRelations = relations(homepageSections, ({ one, many }) => ({
+  category: one(categories, {
+    fields: [homepageSections.categoryId],
+    references: [categories.id],
+  }),
+  // Relation to the pivot table
+  items: many(sectionItems), 
+}));
+
+export const sectionItemsRelations = relations(sectionItems, ({ one }) => ({
+  section: one(homepageSections, {
+    fields: [sectionItems.sectionId],
+    references: [homepageSections.id],
+  }),
+  drug: one(drugs, {
+    fields: [sectionItems.drugId],
+    references: [drugs.id],
+  }),
 }));
 
 export const ordersRelations = relations(orders, ({ many, one }) => ({
