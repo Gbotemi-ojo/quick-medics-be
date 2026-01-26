@@ -7,7 +7,9 @@ import morgan from 'morgan';
 
 import { testDatabaseConnection } from './config/database';
 import apiRoutes from './routes';
-import bannerRoutes from './routes/banner.routes'; // <--- Import Banner Routes
+import bannerRoutes from './routes/banner.routes'; 
+// Import the new verification function
+import { verifySmtpConnection } from './services/emailService'; 
 
 dotenv.config();
 
@@ -24,7 +26,7 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key'], 
 }));
 
-// Body parser - INCREASED LIMIT FOR IMAGE UPLOADS
+// Body parser
 app.use(express.json({ limit: '50mb' })); 
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
@@ -45,7 +47,7 @@ app.use(API_PREFIX, apiLimiter);
 
 // Register Routes
 app.use(API_PREFIX, apiRoutes);
-app.use(`${API_PREFIX}/banners`, bannerRoutes); // <--- Mount Banner Routes
+app.use(`${API_PREFIX}/banners`, bannerRoutes); 
 
 // Generic error handler
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -55,12 +57,15 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
 
 const PORT = process.env.PORT || 5000;
 
-// Test database connection and start server
+// Test database connection AND SMTP, then start server
 testDatabaseConnection()
   .then(() => {
     console.log("Database connection test completed successfully.");
-    app.listen(PORT, () => {
+    app.listen(PORT, async () => {
       console.log(`Server is running on port ${PORT}`);
+      
+      // RUN THE SMTP TEST HERE
+      await verifySmtpConnection(); 
     });
   })
   .catch(error => {

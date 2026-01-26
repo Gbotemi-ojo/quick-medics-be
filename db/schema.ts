@@ -91,6 +91,18 @@ export const orderItems = mysqlTable('order_items', {
   price: decimal('price', { precision: 10, scale: 2 }).notNull(),
 });
 
+export const trainingApplications = mysqlTable('training_applications', {
+  id: serial('id').primaryKey(),
+  fullName: varchar('full_name', { length: 255 }).notNull(),
+  email: varchar('email', { length: 255 }).notNull(),
+  phone: varchar('phone', { length: 20 }).notNull(),
+  address: text('address').notNull(),
+  educationLevel: varchar('education_level', { length: 100 }),
+  motivation: text('motivation').notNull(), // "Why do you want to join?"
+  status: varchar('status', { length: 20 }).default('pending'), // pending, contacted, rejected
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
 // --- RELATIONS ---
 export const drugsRelations = relations(drugs, ({ one }) => ({
   category: one(categories, { fields: [drugs.categoryId], references: [categories.id] }),

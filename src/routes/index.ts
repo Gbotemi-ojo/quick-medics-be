@@ -5,6 +5,7 @@ import paymentRoutes from './payment.routes';
 import orderRoutes from './order.routes'; // Import
 import profileRoutes from './profile.routes';
 import bannerRoutes from './banner.routes';
+import trainingRoutes from './training.routes';
 
 const router = Router();
 
@@ -16,5 +17,6 @@ router.use('/payment', paymentRoutes);
 router.use('/orders', orderRoutes); // Register
 router.use('/profile', profileRoutes);
 router.use('/banners', bannerRoutes);
+router.use('/training',trainingRoutes);
 
 export default router;
