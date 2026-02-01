@@ -17,7 +17,7 @@ export const orderService = {
       paystackReference: orderData.paystackReference,
       status: 'paid',
     }).$returningId();
-
+    
     const orderId = result.id;
 
     if (items.length > 0) {

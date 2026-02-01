@@ -3,26 +3,37 @@ import { db } from '../config/database';
 import { drugs, categories } from '../../db/schema';
 import { InferInsertModel } from 'drizzle-orm';
 
-type RawDrugInput = {
+// Updated Type to accept both "Frontend Style" and "CSV Style" keys
+type DrugInput = {
+  // CSV / Raw Keys
   Facility_Name?: string;
-  Product: string;
+  Product?: string;
   API?: string;
   Tags?: string;
   Volume?: string;
-  Retail_Price: string | number;
+  Retail_Price?: string | number;
   Cost_Price?: string | number;
-  In_Stock: string | number;
+  In_Stock?: string | number;
   Availability?: string;
   Expiry?: string;
+  Category?: string;
+  
+  // Frontend / Clean Keys
+  name?: string;
+  retailPrice?: string | number;
+  costPrice?: string | number;
+  stock?: string | number;
+  category?: string;
   image_url?: string;
-  Category: string;
+  imageUrl?: string;
+  discountPercent?: number;
+  isFeatured?: boolean;
 };
 
 export const drugService = {
   
   // NEW: Get All Categories
   getAllCategories: async () => {
-    // Select all categories ordered by name
     return await db.select().from(categories).orderBy(asc(categories.name));
   },
 
@@ -39,7 +50,9 @@ export const drugService = {
       stock: drugs.stock,
       category: categories.name,
       image: drugs.imageUrl,
-      expiry: drugs.expiryDate
+      expiry: drugs.expiryDate,
+      discountPercent: drugs.discountPercent,
+      isFeatured: drugs.isFeatured
     })
     .from(drugs)
     .leftJoin(categories, eq(drugs.categoryId, categories.id))
@@ -93,7 +106,9 @@ export const drugService = {
       price: drugs.retailPrice,
       stock: drugs.stock,
       category: categories.name,
-      image: drugs.imageUrl
+      image: drugs.imageUrl,
+      discountPercent: drugs.discountPercent,
+      isFeatured: drugs.isFeatured
     })
     .from(drugs)
     .leftJoin(categories, eq(drugs.categoryId, categories.id))
@@ -118,9 +133,11 @@ export const drugService = {
     };
   },
 
-  createOrUpdateDrug: async (data: RawDrugInput) => {
+  // 1. CREATE Logic (Handles both Frontend and CSV formats)
+  createOrUpdateDrug: async (data: DrugInput) => {
     let categoryId: number;
-    const categoryName = data.Category ? data.Category.trim() : 'Uncategorized';
+    // Check 'Category' (CSV) OR 'category' (Frontend)
+    const categoryName = (data.Category || data.category || 'Uncategorized').trim();
 
     const existingCategory = await db.select().from(categories).where(eq(categories.name, categoryName)).limit(1);
 
@@ -134,28 +151,43 @@ export const drugService = {
       categoryId = newCategory.id;
     }
 
+    // Helper to safely parse price
+    const parsePrice = (val: string | number | undefined) => val ? val.toString().replace(/,/g, '') : '0';
+    // Helper to safely parse stock
+    const parseStock = (val: string | number | undefined) => val ? parseInt(val.toString()) : 0;
+
     const drugData: InferInsertModel<typeof drugs> = {
-      name: data.Product,
+      // Check 'Product' (CSV) OR 'name' (Frontend)
+      name: data.Product || data.name || 'Unknown Drug',
       activeIngredient: data.API || null,
       tags: data.Tags || null,
       volume: data.Volume || null,
-      retailPrice: data.Retail_Price ? data.Retail_Price.toString().replace(/,/g, '') : '0',
-      costPrice: data.Cost_Price ? data.Cost_Price.toString().replace(/,/g, '') : '0',
-      stock: data.In_Stock ? parseInt(data.In_Stock.toString()) : 0,
-      imageUrl: data.image_url || '',
+      // Check 'Retail_Price' (CSV) OR 'retailPrice' (Frontend)
+      retailPrice: parsePrice(data.Retail_Price || data.retailPrice),
+      costPrice: parsePrice(data.Cost_Price || data.costPrice),
+      // Check 'In_Stock' (CSV) OR 'stock' (Frontend)
+      stock: parseStock(data.In_Stock || data.stock),
+      // Check 'image_url' (CSV) OR 'imageUrl' (Frontend)
+      imageUrl: data.image_url || data.imageUrl || '',
       categoryId: categoryId,
       expiryDate: data.Expiry ? new Date(data.Expiry) : null,
+      discountPercent: data.discountPercent || 0,
+      isFeatured: data.isFeatured || false,
       isPrescriptionRequired: false,
     };
 
     return await db.insert(drugs).values(drugData);
   },
 
-  updateDrug: async (id: number, data: Partial<RawDrugInput>) => {
+  // 2. UPDATE Logic (Handles both Frontend and CSV formats)
+  updateDrug: async (id: number, data: Partial<DrugInput>) => {
     let categoryId: number | undefined;
     
-    if (data.Category) {
-        const categoryName = data.Category.trim();
+    // Check both key formats for category
+    const inputCatName = data.Category || data.category;
+
+    if (inputCatName) {
+        const categoryName = inputCatName.trim();
         const existingCategory = await db.select().from(categories).where(eq(categories.name, categoryName)).limit(1);
         
         if (existingCategory.length > 0) {
@@ -166,17 +198,26 @@ export const drugService = {
         }
     }
 
-    await db.update(drugs)
-      .set({
-        name: data.Product,
-        retailPrice: data.Retail_Price ? data.Retail_Price.toString().replace(/,/g, '') : undefined,
-        stock: data.In_Stock ? parseInt(data.In_Stock.toString()) : undefined,
-        imageUrl: data.image_url,
-        categoryId: categoryId,
+    const parsePrice = (val: string | number | undefined) => val ? val.toString().replace(/,/g, '') : undefined;
+    const parseStock = (val: string | number | undefined) => val ? parseInt(val.toString()) : undefined;
+
+    // We build an update object using coalescing (||) to support both formats
+    const updatePayload: any = {
         updatedAt: new Date()
-      })
+    };
+
+    if (data.Product || data.name) updatePayload.name = data.Product || data.name;
+    if (data.Retail_Price || data.retailPrice) updatePayload.retailPrice = parsePrice(data.Retail_Price || data.retailPrice);
+    if (data.In_Stock || data.stock) updatePayload.stock = parseStock(data.In_Stock || data.stock);
+    if (data.image_url || data.imageUrl) updatePayload.imageUrl = data.image_url || data.imageUrl;
+    if (data.discountPercent !== undefined) updatePayload.discountPercent = data.discountPercent;
+    if (data.isFeatured !== undefined) updatePayload.isFeatured = data.isFeatured;
+    if (categoryId) updatePayload.categoryId = categoryId;
+
+    await db.update(drugs)
+      .set(updatePayload)
       .where(eq(drugs.id, id));
       
-    return { id, ...data };
+    return { id, ...updatePayload };
   }
 };

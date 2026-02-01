@@ -16,10 +16,10 @@ const seedUsers = async () => {
   const db = drizzle(pool);
 
   // Admin Credentials
-  const ADMIN_NAME = 'System Admin';
-  const ADMIN_EMAIL = 'hommzmum@gmail.com';
-  const ADMIN_PHONE = '08163943804'; 
-  const ADMIN_PASS = '1234'; 
+  const ADMIN_NAME = 'Busari Ridwan';
+  const ADMIN_EMAIL = 'quickmedics.technical@gmail.com';
+  const ADMIN_PHONE = '08113539265'; 
+  const ADMIN_PASS = 'Quickmedicstech'; 
 
   try {
     const hashedPassword = await bcrypt.hash(ADMIN_PASS, 10);
