@@ -1,6 +1,7 @@
 import { eq, sql, or, like, asc, desc, and } from 'drizzle-orm';
 import { db } from '../config/database';
-import { drugs, categories } from '../../db/schema';
+// Added sectionItems to imports
+import { drugs, categories, sectionItems } from '../../db/schema';
 import { InferInsertModel } from 'drizzle-orm';
 
 // Updated Type to accept both "Frontend Style" and "CSV Style" keys
@@ -219,5 +220,19 @@ export const drugService = {
       .where(eq(drugs.id, id));
       
     return { id, ...updatePayload };
+  },
+
+  // 3. DELETE Logic
+  deleteDrug: async (id: number) => {
+    // A. Cleanup Homepage Sections (Remove this drug from any pinned sections first)
+    // This prevents foreign key errors if the drug is being displayed on the homepage
+    await db.delete(sectionItems).where(eq(sectionItems.drugId, id));
+
+    // B. Delete the Drug
+    // Note: If this drug is in 'orderItems' (someone bought it), the DB might throw an error.
+    // The Controller handles that specific error.
+    await db.delete(drugs).where(eq(drugs.id, id));
+    
+    return true;
   }
 };

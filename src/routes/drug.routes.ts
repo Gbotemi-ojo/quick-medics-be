@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import { 
-    getDrugs, getDrug, createDrug, updateDrug, 
+    getDrugs, getDrug, createDrug, updateDrug, deleteDrug, // Imported deleteDrug
     getCategories, getHomepageData, updateCategory,
     getSections, createSection, deleteSection,
-    getSectionPinnedItems, updateSectionPinnedItems // <--- New Imports
+    getSectionPinnedItems, updateSectionPinnedItems 
 } from '../controllers/drug.controller';
 
 const router = Router();
@@ -16,7 +16,7 @@ router.get('/sections', getSections);
 router.post('/sections', createSection);
 router.delete('/sections/:id', deleteSection);
 
-// NEW: Pinned Items Management
+// Pinned Items Management
 router.get('/sections/:id/items', getSectionPinnedItems);
 router.put('/sections/:id/items', updateSectionPinnedItems);
 
@@ -29,5 +29,6 @@ router.get('/', getDrugs);
 router.get('/:id', getDrug);
 router.post('/', createDrug);
 router.put('/:id', updateDrug);
+router.delete('/:id', deleteDrug); // Added DELETE Route
 
 export default router;

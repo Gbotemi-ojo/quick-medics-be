@@ -208,3 +208,18 @@ export const updateDrug = async (req: Request, res: Response) => {
     res.status(200).json({ success: true, data: result });
   } catch (error) { res.status(500).json({ success: false, message: 'Error' }); }
 };
+
+export const deleteDrug = async (req: Request, res: Response) => {
+  try {
+    const id = parseInt(req.params.id as string);
+    await drugService.deleteDrug(id);
+    res.status(200).json({ success: true, message: 'Drug deleted successfully' });
+  } catch (error) {
+    // Check if the error is due to database constraints (e.g. drug is in an order)
+    console.error("Delete Drug Error:", error);
+    if ((error as any).code === 'ER_ROW_IS_REFERENCED_2') {
+         return res.status(400).json({ success: false, message: 'Cannot delete: This drug is part of existing customer orders.' });
+    }
+    res.status(500).json({ success: false, message: 'Error deleting drug' });
+  }
+};
