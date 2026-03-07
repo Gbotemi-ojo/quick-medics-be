@@ -8,6 +8,10 @@ import { eq } from 'drizzle-orm';
 import crypto from 'crypto';
 
 export const getPaystackKey = (req: Request, res: Response) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  
   const publicKey = process.env.PAYSTACK_PUBLIC_KEY;
   if (!publicKey) return res.status(500).json({ success: false, message: 'Public key not configured' });
   res.status(200).json({ success: true, key: publicKey });
@@ -60,7 +64,7 @@ export const verifyPayment = async (req: Request, res: Response) => {
 
         return res.status(200).json({ 
             success: true, 
-            message: 'Payment verified & Order created',
+            message: 'Payment verified',
             data: { orderId }
         });
 
@@ -108,15 +112,11 @@ export const paystackWebhook = async (req: Request, res: Response) => {
                 const email = event.data.customer.email;
                 const amount = event.data.amount / 100;
 
-                console.log(`Valid payment received from Paystack: Ref ${reference} for NGN ${amount}`);
-
                 setTimeout(async () => {
                     const [existingOrder] = await db.select().from(orders).where(eq(orders.paystackReference, reference)).limit(1);
 
                     if (!existingOrder) {
-                        console.error(`Payment received for Ref: ${reference} (${email}), but NO ORDER was found in the database!`);
-                    } else {
-                        console.log(`Order #${existingOrder.id} successfully matched with payment.`);
+                        console.error(`Payment received but no order found: ${reference}`);
                     }
                 }, 5000);
             }
