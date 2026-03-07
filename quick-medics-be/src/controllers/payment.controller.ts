@@ -3,9 +3,8 @@ import { paymentService } from '../services/paymentService';
 import { orderService } from '../services/orderService';
 import { sendOrderConfirmationEmail } from '../services/emailService';
 import { db } from '../config/database'; 
-import { users, orders } from '../../db/schema';
+import { users } from '../../db/schema';
 import { eq } from 'drizzle-orm';
-import crypto from 'crypto';
 
 export const getPaystackKey = (req: Request, res: Response) => {
   const publicKey = process.env.PAYSTACK_PUBLIC_KEY;
@@ -31,6 +30,7 @@ export const verifyPayment = async (req: Request, res: Response) => {
         
         let userId = user && user.id ? user.id : null;
 
+        // Smart User Link: If Guest checkout but email matches a user, link them!
         if (!userId && customerEmail) {
             const [existingUser] = await db.select().from(users).where(eq(users.email, customerEmail));
             if (existingUser) {
@@ -69,7 +69,7 @@ export const verifyPayment = async (req: Request, res: Response) => {
     }
 
   } catch (error) {
-    console.error(error);
+    console.error('Payment Verification Error:', error);
     res.status(500).json({ success: false, message: 'Server Error' });
   }
 };
@@ -80,51 +80,16 @@ export const getMyOrders = async (req: Request, res: Response) => {
         
         if(!userId) return res.status(401).json({success: false, message: "Unauthorized"});
 
-        const ordersList = await orderService.getUserOrders(Number(userId));
+        const orders = await orderService.getUserOrders(Number(userId));
         
+        // --- STRICT NO-CACHE HEADERS ---
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
         res.setHeader('Pragma', 'no-cache');
         res.setHeader('Expires', '0');
         
-        res.status(200).json({ success: true, data: ordersList });
+        res.status(200).json({ success: true, data: orders });
     } catch (error) {
-        console.error(error);
+        console.error("Get Orders Error:", error);
         res.status(500).json({ success: false, message: "Error fetching orders" });
     }
 }
-
-export const paystackWebhook = async (req: Request, res: Response) => {
-    try {
-        const secret = process.env.PAYSTACK_SECRET_KEY;
-        if (!secret) return res.status(500).send('Secret key missing');
-
-        const hash = crypto.createHmac('sha512', secret).update(JSON.stringify(req.body)).digest('hex');
-
-        if (hash === req.headers['x-paystack-signature']) {
-            const event = req.body;
-
-            if (event.event === 'charge.success') {
-                const reference = event.data.reference;
-                const email = event.data.customer.email;
-                const amount = event.data.amount / 100;
-
-                console.log(`Valid payment received from Paystack: Ref ${reference} for NGN ${amount}`);
-
-                setTimeout(async () => {
-                    const [existingOrder] = await db.select().from(orders).where(eq(orders.paystackReference, reference)).limit(1);
-
-                    if (!existingOrder) {
-                        console.error(`Payment received for Ref: ${reference} (${email}), but NO ORDER was found in the database!`);
-                    } else {
-                        console.log(`Order #${existingOrder.id} successfully matched with payment.`);
-                    }
-                }, 5000);
-            }
-        }
-        
-        res.status(200).send('Webhook received');
-    } catch (error) {
-        console.error(error);
-        res.status(500).send('Server Error');
-    }
-};
