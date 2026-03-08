@@ -112,13 +112,57 @@ export const paystackWebhook = async (req: Request, res: Response) => {
                 const email = event.data.customer.email;
                 const amount = event.data.amount / 100;
 
-                setTimeout(async () => {
-                    const [existingOrder] = await db.select().from(orders).where(eq(orders.paystackReference, reference)).limit(1);
+                // Extract the metadata passed from the updated Cart.jsx
+                const metadata = event.data.metadata || {};
 
-                    if (!existingOrder) {
-                        console.error(`Payment received but no order found: ${reference}`);
+                setTimeout(async () => {
+                    try {
+                        const [existingOrder] = await db.select().from(orders).where(eq(orders.paystackReference, reference)).limit(1);
+
+                        // If the frontend didn't create the order, the webhook acts as the fallback
+                        if (!existingOrder) {
+                            console.log(`[WEBHOOK] Frontend disconnected. Creating order for Ref: ${reference}...`);
+
+                            const customerName = metadata.name || 'Customer';
+                            const customerPhone = metadata.phone || '';
+                            const deliveryAddress = metadata.address || 'Address not provided';
+                            const cartItems = metadata.cartItems || []; 
+
+                            // Smart User Link: Ensure it attaches to their "My Orders" history if they have an account
+                            let userId = null;
+                            if (email) {
+                                const [existingUser] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+                                if (existingUser) userId = existingUser.id;
+                            }
+
+                            // 1. Create the order using the data from metadata
+                            const orderId = await orderService.createOrder({
+                                userId,
+                                customerName,
+                                customerEmail: email,
+                                customerPhone,
+                                deliveryAddress,
+                                totalAmount: amount,
+                                paystackReference: reference
+                            }, cartItems);
+
+                            // 2. Send the receipt email
+                            await sendOrderConfirmationEmail(email, {
+                                customerName,
+                                orderId,
+                                totalAmount: amount,
+                                address: deliveryAddress,
+                                items: cartItems
+                            });
+
+                            console.log(`[WEBHOOK] Success! Order #${orderId} saved and email sent.`);
+                        } else {
+                            console.log(`[WEBHOOK] Order already handled by frontend for Ref: ${reference}`);
+                        }
+                    } catch (err) {
+                        console.error("[WEBHOOK ERROR] Failed to process fallback order:", err);
                     }
-                }, 5000);
+                }, 5000); // 5 second delay to give the frontend time to process first
             }
         }
         
