@@ -165,6 +165,22 @@ export const updateCategory = async (req: Request, res: Response) => {
   } catch (error) { res.status(500).json({ success: false, message: 'Error' }); }
 };
 
+// NEW: Delete Category Controller
+export const deleteCategory = async (req: Request, res: Response) => {
+  try {
+    const id = parseInt(req.params.id as string);
+    await drugService.deleteCategory(id);
+    res.status(200).json({ success: true, message: 'Category deleted successfully' });
+  } catch (error) {
+    console.error("Delete Category Error:", error);
+    // Prevent crashes if the category is still attached to drugs
+    if ((error as any).code === 'ER_ROW_IS_REFERENCED_2') {
+         return res.status(400).json({ success: false, message: 'Cannot delete: There are drugs currently assigned to this category.' });
+    }
+    res.status(500).json({ success: false, message: 'Error deleting category' });
+  }
+};
+
 export const getCategories = async (req: Request, res: Response) => {
   try {
     const result = await drugService.getAllCategories();

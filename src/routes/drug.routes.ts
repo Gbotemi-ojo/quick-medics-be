@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { 
-    getDrugs, getDrug, createDrug, updateDrug, deleteDrug, // Imported deleteDrug
-    getCategories, getHomepageData, updateCategory,
+    getDrugs, getDrug, createDrug, updateDrug, deleteDrug,
+    getCategories, getHomepageData, updateCategory, deleteCategory, // Imported deleteCategory
     getSections, createSection, deleteSection,
     getSectionPinnedItems, updateSectionPinnedItems 
 } from '../controllers/drug.controller';
@@ -23,12 +23,13 @@ router.put('/sections/:id/items', updateSectionPinnedItems);
 // Category Management
 router.get('/categories', getCategories);
 router.put('/categories/:id', updateCategory);
+router.delete('/categories/:id', deleteCategory); // Added DELETE Route
 
 // Drug CRUD
 router.get('/', getDrugs);
 router.get('/:id', getDrug);
 router.post('/', createDrug);
 router.put('/:id', updateDrug);
-router.delete('/:id', deleteDrug); // Added DELETE Route
+router.delete('/:id', deleteDrug);
 
 export default router;

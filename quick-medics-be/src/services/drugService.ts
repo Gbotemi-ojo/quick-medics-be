@@ -1,12 +1,9 @@
 import { eq, sql, or, like, asc, desc, and } from 'drizzle-orm';
 import { db } from '../config/database';
-// Added sectionItems to imports
 import { drugs, categories, sectionItems } from '../../db/schema';
 import { InferInsertModel } from 'drizzle-orm';
 
-// Updated Type to accept both "Frontend Style" and "CSV Style" keys
 type DrugInput = {
-  // CSV / Raw Keys
   Facility_Name?: string;
   Product?: string;
   API?: string;
@@ -18,9 +15,8 @@ type DrugInput = {
   Availability?: string;
   Expiry?: string;
   Category?: string;
-  
-  // Frontend / Clean Keys
   name?: string;
+  activeIngredient?: string;
   retailPrice?: string | number;
   costPrice?: string | number;
   stock?: string | number;
@@ -32,13 +28,10 @@ type DrugInput = {
 };
 
 export const drugService = {
-  
-  // NEW: Get All Categories
   getAllCategories: async () => {
     return await db.select().from(categories).orderBy(asc(categories.name));
   },
 
-  // Get Single Drug
   getDrugById: async (id: number) => {
     const result = await db.select({
       id: drugs.id,
@@ -63,7 +56,6 @@ export const drugService = {
     return result[0] || null;
   },
 
-  // Get All Drugs (With Search, Category & Pagination)
   getAllDrugs: async (
     page: number = 1, 
     limit: number = 20, 
@@ -104,6 +96,7 @@ export const drugService = {
     const data = await db.select({
       id: drugs.id,
       name: drugs.name,
+      activeIngredient: drugs.activeIngredient,
       price: drugs.retailPrice,
       stock: drugs.stock,
       category: categories.name,
@@ -134,10 +127,8 @@ export const drugService = {
     };
   },
 
-  // 1. CREATE Logic (Handles both Frontend and CSV formats)
   createOrUpdateDrug: async (data: DrugInput) => {
     let categoryId: number;
-    // Check 'Category' (CSV) OR 'category' (Frontend)
     const categoryName = (data.Category || data.category || 'Uncategorized').trim();
 
     const existingCategory = await db.select().from(categories).where(eq(categories.name, categoryName)).limit(1);
@@ -152,23 +143,17 @@ export const drugService = {
       categoryId = newCategory.id;
     }
 
-    // Helper to safely parse price
     const parsePrice = (val: string | number | undefined) => val ? val.toString().replace(/,/g, '') : '0';
-    // Helper to safely parse stock
     const parseStock = (val: string | number | undefined) => val ? parseInt(val.toString()) : 0;
 
     const drugData: InferInsertModel<typeof drugs> = {
-      // Check 'Product' (CSV) OR 'name' (Frontend)
       name: data.Product || data.name || 'Unknown Drug',
-      activeIngredient: data.API || null,
+      activeIngredient: data.API || data.activeIngredient || null,
       tags: data.Tags || null,
       volume: data.Volume || null,
-      // Check 'Retail_Price' (CSV) OR 'retailPrice' (Frontend)
       retailPrice: parsePrice(data.Retail_Price || data.retailPrice),
       costPrice: parsePrice(data.Cost_Price || data.costPrice),
-      // Check 'In_Stock' (CSV) OR 'stock' (Frontend)
       stock: parseStock(data.In_Stock || data.stock),
-      // Check 'image_url' (CSV) OR 'imageUrl' (Frontend)
       imageUrl: data.image_url || data.imageUrl || '',
       categoryId: categoryId,
       expiryDate: data.Expiry ? new Date(data.Expiry) : null,
@@ -180,11 +165,9 @@ export const drugService = {
     return await db.insert(drugs).values(drugData);
   },
 
-  // 2. UPDATE Logic (Handles both Frontend and CSV formats)
   updateDrug: async (id: number, data: Partial<DrugInput>) => {
     let categoryId: number | undefined;
     
-    // Check both key formats for category
     const inputCatName = data.Category || data.category;
 
     if (inputCatName) {
@@ -202,12 +185,12 @@ export const drugService = {
     const parsePrice = (val: string | number | undefined) => val ? val.toString().replace(/,/g, '') : undefined;
     const parseStock = (val: string | number | undefined) => val ? parseInt(val.toString()) : undefined;
 
-    // We build an update object using coalescing (||) to support both formats
     const updatePayload: any = {
         updatedAt: new Date()
     };
 
     if (data.Product || data.name) updatePayload.name = data.Product || data.name;
+    if (data.API || data.activeIngredient) updatePayload.activeIngredient = data.API || data.activeIngredient;
     if (data.Retail_Price || data.retailPrice) updatePayload.retailPrice = parsePrice(data.Retail_Price || data.retailPrice);
     if (data.In_Stock || data.stock) updatePayload.stock = parseStock(data.In_Stock || data.stock);
     if (data.image_url || data.imageUrl) updatePayload.imageUrl = data.image_url || data.imageUrl;
@@ -222,15 +205,8 @@ export const drugService = {
     return { id, ...updatePayload };
   },
 
-  // 3. DELETE Logic
   deleteDrug: async (id: number) => {
-    // A. Cleanup Homepage Sections (Remove this drug from any pinned sections first)
-    // This prevents foreign key errors if the drug is being displayed on the homepage
     await db.delete(sectionItems).where(eq(sectionItems.drugId, id));
-
-    // B. Delete the Drug
-    // Note: If this drug is in 'orderItems' (someone bought it), the DB might throw an error.
-    // The Controller handles that specific error.
     await db.delete(drugs).where(eq(drugs.id, id));
     
     return true;

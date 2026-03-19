@@ -210,5 +210,11 @@ export const drugService = {
     await db.delete(drugs).where(eq(drugs.id, id));
     
     return true;
+  },
+
+  // NEW: Delete Category Service
+  deleteCategory: async (id: number) => {
+    await db.delete(categories).where(eq(categories.id, id));
+    return true;
   }
 };
